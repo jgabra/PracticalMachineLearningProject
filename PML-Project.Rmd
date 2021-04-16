@@ -1,0 +1,123 @@
+---
+title: "PML Project"
+author: "JN Gabra"
+date: "4/15/2021"
+output: 
+      html_document:
+            keep_md: true
+---
+# Executive Summary
+Machine learning models are used to predict the classe of weight lifting data from Velloso et al. 2013. Specifically, he data is from acceleromters on the participants belt, forearm, arm, and dumbell as the participants do curl exercies. In this particular data set, thee weight was lifted correctly (Classe = A) or incorreclty in 4 different manners (Classes B, C, D, E). There are 2 data sets, training and validation. The training data set is further divided into a training and a testing data set. The data is pre-processed to handle missing values and zero variance predictors. Various models are built using the training data set and tested for accuracy against the testing data set. The best model was the Gradient Boost Machine model that was then used to predict the classe of the validation data set. The final model accuratley predicted validation classes 100% of the time.
+
+# Project Information
+
+Project data comes from:   
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013 
+
+http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har 
+
+The data is from acceleromters on the participants belt, forearm, arm, and dumbell as the participants do curl exercies. In this particular data set, thee weight was lifted correctly (Classe = A) or incorreclty in 4 different manners (Classes B, C, D, E)
+
+There are two data sets provided: **Training Data set** and **Testing Data**. *The testing data does not have the classe and is rather a validation data set.*
+
+### Loading the Data Sets and Necessary Libraries  
+This requires the use of the caret package. The data to be used is from the hyperlinks below but comes from Velloso et al. 2013. There is a training data set and a testing data set. It should be noted that the testing data set is acually a *testing validation* data set without the classe indication. The *"training data"* set is divided into an *acutal training data* set and a *test data* set. The training data set will be used to train the different models while the test data set will be used to evaluate the accuracy of each model to ultimately pick the best model to be used against the validation data set. 
+
+Cross-validation method used is the random subsampling method to divide the "training data" set into an actual training data set and a testing data set. Specifically, 70% of the original training data is kept for model training while the remaining 30% is used for model testing.
+
+```{r, message = FALSE, warning = FALSE}
+require(caret)
+require(knitr)
+training_data<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+testing_validation<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
+set.seed(71890) #Cross-validation follows
+inTrain = createDataPartition(training_data$classe, p = 0.7)[[1]]
+training = training_data[ inTrain,-c(1:7)]
+testing = training_data[-inTrain,]
+
+training$classe<-as.factor(training$classe)
+testing$classe<-as.factor(testing$classe)
+```
+
+
+
+### Data Pre-Processing  
+First, we will do a barchart on the training data classe. Although not included for brevity, the training data was further explored for trends. It was revealed that there were a lot of missing values and for particular variables. These variables are removed from the training data set used in the models. In addition, the predictors were also analyzed to see if they are near zero variance predictors. If this was true, they were removed fromt the training data set used in model development.  
+```{r}
+barchart(training$classe)
+
+na_count <-sapply(training, function(y) sum(length(which(is.na(y)))))
+temp<-na_count==0
+training_temp<-training[,temp]
+nsv<-nearZeroVar(training_temp, saveMetrics = TRUE)
+a<-nsv$nzv==FALSE
+training_temp2<-training_temp[,a]
+```
+In the code above, the final training data used for model developement is "training_temp2".
+
+### Building and Testing Models
+The expected model error is about 30% (i.e. 70% accuracy) due to the fact that the classes are either correct motion (Classe A) or some variation in motion (Classes B through E). This is a very conservative estimate. 
+
+The models used are all classifiers since our outcome is a factor variable. The models chosen are: classification and regression trees (rpart), linear discriminant analysis (lda), and gradient boosting machine (gbm), naive bayes (nb), and k-nearest neighbor (knn). Other models were run (random forest model) but are not included in this r markdown file for brevity as they take a while to run and do not produce better results. This was also true for principal component pre-processing included. Lastly, I also tried 2 different combinations to see if it would produce a better model than its subcomponents. Howver, they are not run in this document. The code is commented out.  
+
+Each model is run against the testing data set to compare them to each other.
+
+```{r,cache=TRUE}
+set.seed(71890)
+fit_rpart<-train(classe~.,method="rpart",data=training_temp2)
+confusionMatrix(testing$classe,predict(fit_rpart,testing))
+
+fit_lda<-train(classe~.,method="lda",data=training_temp2)
+confusionMatrix(testing$classe,predict(fit_lda,testing))
+
+fit_gbm<-train(classe~.,method="gbm",data=training_temp2,verbose=FALSE)
+confusionMatrix(testing$classe,predict(fit_gbm,testing))
+```
+
+```{r,cache=TRUE, message = FALSE, warning = FALSE}
+fit_nb<-train(classe~.,method="nb",data=training_temp2)
+confusionMatrix(testing$classe,predict(fit_nb,testing))
+```
+
+```{r,cache=TRUE,  message = FALSE, warning = FALSE}
+fit_knn<-train(classe~.,method="knn",data=training_temp2)
+confusionMatrix(testing$classe,predict(fit_knn,testing))
+```
+
+```{r,echo=FALSE} 
+## Unused data chunks for reference
+
+# pred_gbm<-predict(fit_gbm,testing)
+# pred_knn<-predict(fit_knn,testing)
+# predDF<-data.frame(pred_knn,pred_gbm,classe=testing$classe)
+# comboModFit<-train(classe~.,method="rf",data=predDF)
+# confusionMatrix(testing$classe,predict(comboModFit,predDF))
+# comboModFit2<-train(classe~.,method="gbm",data=predDF)
+# confusionMatrix(testing$classe,predict(comboModFit2,predDF))
+# 
+# pred_rpart<-predict(fit_rpart,testing)
+# pred_lda<-predict(fit_lda,testing)
+# predDF<-data.frame(pred_rpart,pred_lda,classe=testing$classe)
+# comboModFit<-train(classe~.,method="rf",data=predDF)
+# confusionMatrix(testing$classe,predict(comboModFit,predDF))
+# comboModFit2<-train(classe~.,method="gbm",data=predDF)
+# confusionMatrix(testing$classe,predict(comboModFit2,predDF))
+```
+
+```{r,cache=TRUE, message = FALSE, warning = FALSE} 
+data<-data.frame(Model=c("rpart","lda","gbm","nb","knn"),Accuracy=c(confusionMatrix(testing$classe,predict(fit_rpart,testing))$overall[1],confusionMatrix(testing$classe,predict(fit_lda,testing))$overall[1],confusionMatrix(testing$classe,predict(fit_gbm,testing))$overall[1],confusionMatrix(testing$classe,predict(fit_nb,testing))$overall[1],confusionMatrix(testing$classe,predict(fit_knn,testing))$overall[1]))  
+#data<-data.frame(Model=c("rpart","lda","gbm","nb","knn"),Accuracy=c(confusionMatrix(testing$classe,predict(fit_rpart,testing))$overall[1],confusionMatrix(testing$classe,predict(fit_lda,testing))$overall[1],confusionMatrix(testing$classe,predict(fit_gbm,testing))$overall[1],0.74,0.9076))
+data[,2]<-round(data[,2],2)*100
+names(data)[2]<-"Accuracy [%]"
+kable(data)
+```
+From the Model vs Accuracy table, we can see that the gradient boost machine model produces the best accuracy at 96%. This model will be used to run against the *testing validation* data set (i.e. the same data set for the quiz).
+
+### Testing the final model on the validation data set
+```{r}
+Quiz_Answers<-predict(fit_gbm,testing_validation)
+#Quiz_Answers
+```
+The quiz answers were submitted to the online validation data set quiz and the final Gradient Boost Model was 100% accurate for the validation data set.
+
